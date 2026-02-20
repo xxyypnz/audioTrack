@@ -1,0 +1,184 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+    <ScrollView
+        xmlns:android="http://schemas.android.com/apk/res/android"
+
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+    <LinearLayout
+        android:orientation="vertical"
+        android:layout_width="fill_parent"
+        android:layout_height="fill_parent"
+        >
+
+    <TextView
+        android:id="@+id/tv_hpb"
+        android:layout_width="match_parent"
+        android:text="混频比:left:50-right:50"
+        android:gravity="center"
+        android:layout_height="40dp"/>
+    <SeekBar
+        android:id="@+id/seekBarhpb"
+        android:layout_width="match_parent"
+        android:max="100"
+        android:progress="50"
+        android:layout_height="40dp" />
+
+    <TextView
+        android:id="@+id/tv_HZ"
+        android:layout_width="match_parent"
+        android:text="当前HZ:"
+        android:visibility="gone"
+        android:gravity="center"
+        android:layout_height="40dp"/>
+    <LinearLayout
+        android:orientation="horizontal"
+        android:layout_width="match_parent"
+        android:visibility="gone"
+        android:layout_height="wrap_content">
+        <EditText
+            android:id="@+id/et_hz"
+            android:layout_width="0dp"
+            android:layout_weight="2"
+            android:inputType="number"
+            android:hint="请输入赫兹"
+            android:digits="0123456789"
+            android:layout_height="wrap_content"/>
+        <Button
+            android:id="@+id/tv_sure"
+            android:layout_weight="1"
+            android:layout_width="wrap_content"
+            android:text="确定"
+            android:gravity="center"
+            android:layout_height="40dp"/>
+    </LinearLayout>
+    <TextView
+        android:id="@+id/tv_pl_right"
+        android:layout_width="match_parent"
+        android:text="Right-当前频率1"
+        android:gravity="center"
+        android:layout_height="40dp"/>
+
+    <SeekBar
+        android:id="@+id/seekBarRight"
+        android:layout_width="match_parent"
+        android:max="12000"
+        android:layout_height="40dp" />
+    <TextView
+        android:id="@+id/tv_pl"
+        android:layout_width="match_parent"
+        android:text="left-当前频率1"
+        android:gravity="center"
+        android:layout_height="40dp"/>
+
+    <SeekBar
+        android:id="@+id/seekBar2"
+        android:layout_width="match_parent"
+        android:max="12000"
+        android:layout_height="40dp" />
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:orientation="horizontal"
+        android:layout_height="wrap_content">
+        <Button
+            android:id="@+id/btn_add"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:text="left频率+1" />
+        <Button
+            android:id="@+id/btn_sub"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:text="left频率-1" />
+    </LinearLayout>
+    <SeekBar
+        android:id="@+id/seekBar3"
+        android:layout_width="match_parent"
+        android:layout_marginTop="40dp"
+        android:max="32767"
+        android:progress="1500"
+        android:layout_height="40dp" />
+    <TextView
+        android:id="@+id/tv_yl"
+        android:layout_width="match_parent"
+        android:text="当前响度:1500"
+        android:gravity="center"
+        android:layout_height="40dp"/>
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:orientation="horizontal"
+        android:layout_height="wrap_content">
+        <Button
+            android:id="@+id/yl_add"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:text="响度+1" />
+        <Button
+            android:id="@+id/yl_sub"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:text="响度-1" />
+    </LinearLayout>
+    <Button
+        android:id="@+id/btn_play"
+        android:layout_width="match_parent"
+        android:layout_marginTop="40dp"
+        android:layout_height="wrap_content"
+        android:text="播放" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:visibility="gone"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/btn_left"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="左声道播放" />
+
+        <Button
+            android:id="@+id/btn_right"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="右声道播放" />
+    </LinearLayout>
+    <Button
+        android:id="@+id/btn_stop"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="停止播放" />
+
+        <Button
+            android:id="@+id/btn_lj"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="soket连接" />
+        <TextView
+            android:id="@+id/tv_sd"
+            android:layout_width="match_parent"
+            android:hint="接受到的数据"
+            android:layout_height="wrap_content"/>
+    <Button
+        android:id="@+id/btn_demo"
+        android:layout_width="match_parent"
+        android:visibility="gone"
+        android:layout_height="wrap_content"
+        android:text="播放Demo" />
+    <Button
+        android:layout_width="wrap_content"
+        android:text="ecg"
+        android:onClick="goEcg"
+        android:visibility="gone"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="@dimen/dd60"
+        android:layout_height="wrap_content"/>
+</LinearLayout>
+</ScrollView>

@@ -1,0 +1,18 @@
+# --- 必须忽略的 ---
+.gradle/
+.idea/
+build/
+/*/build/
+local.properties
+.cxx/
+.externalNativeBuild/
+*.apk
+*.jks
+*.zip
+*.tar.gz
+*.wav
+
+# --- 特别注意 ---
+# 忽略所有生成的临时文件
+*.iml
+.DS_Store
