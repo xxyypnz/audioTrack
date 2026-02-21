@@ -66,7 +66,6 @@ import java.util.List;
 
 // 20250904 pgh added for decript
 
-
 /**
  * @Description: 描述
  * @Author: wangcheng
@@ -76,6 +75,7 @@ import java.util.List;
  * @UpdateRemark: 更新说明
  * @Vsersion: 1.0
  */
+
 public class SyActivity extends AppCompatActivity implements SerialListener{
     TextView viewById;
     SeekBar seekBar, seekBar2;
@@ -84,6 +84,7 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
     private int vo = 50;
     private int pl = 440;
 
+    //region 设置初始化之后的回调
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -107,6 +108,7 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
         btnpl4 = findViewById(R.id.btn_pl4);
         btnbf = findViewById(R.id.bt_bf);
         seekBar2 = findViewById(R.id.seekBar3);
+
         btnpl1.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
@@ -273,20 +275,47 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
         findViewById(R.id.bt_zfc).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-//                PlayUtils playUtils=new PlayUtils(SyActivity.this);
-//                playUtils.palynew("{\"time\":4," +
-//                        "\"left\":[{\"type\":0, \"para\":{\"freq\":5540,\"db\":60}},{\"type\":2,\"para\":{\"freq\":5540,\"db\":55}}]," +
-//                        "\"right\":[{\"type\":2, \"para\":{\"freq\":5540,\"db\":50}},{\"type\":3,\"para\":{\"freq\":5540,\"db\":70}}]" +
-//                        "}");
                 palynew("{\"time\":4," +
                         "\"left\":[{\"type\":0, \"para\":{\"freq\":5540,\"db\":60}},{\"type\":2,\"para\":{\"freq\":5540,\"db\":55}}]," +
                         "\"right\":[{\"type\":2, \"para\":{\"freq\":5540,\"db\":50}},{\"type\":3,\"para\":{\"freq\":5540,\"db\":70}}]" +
                         "}");
             }
         });
-//        setData();
     }
 
+    // pnz added since 2026-02-21
+    // 新开串口线程逻辑下的统一销毁策略
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if(serverThread != null){
+            serverThread.stopServer();
+        }
+        releaseAndInitMediaList(true);
+        destroyTime();
+        destroyPlayer();
+    }
+
+    // pnz on 2026-02-21
+    // 重写接口SerialListener
+    @Override
+    public void onCommandReceived(final String json) {
+        // 必须在 UI 线程更新界面和触发播放
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                viewById.setText("收到指令: " + json);
+                palynew(json); // 调用原有的播放解析逻辑
+            }
+        });
+    }
+
+    @Override
+    public void onSerialError(Exception e) {
+        Log.e("SyActivity", "串口发生故障: " + e.getMessage());
+    }
+
+    //endregion 设置初始化之后的回调
 
     private boolean decript() {
         // 请将下面的MAC地址替换为您设备实际的以太网MAC地址（获取后替换）
@@ -341,8 +370,6 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
         return null;
     }
 
-
-
     /**
      * 收到播放
      */
@@ -375,67 +402,6 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
             throw new RuntimeException(e);
         }
     }
-
-    String data = "";
-
-
-    /**
-     * 初始化串口
-     */
-   /* private void initSerial() {
-        InputStream input;//收到串口信息
-        input = null;
-        try {
-//            SerialPort serialPort=new SerialPort(new File(""),115200);
-            SerialPort serialPort = SerialPort //
-                    .newBuilder("/dev/ttyAS2", 115200) // 串口地址地址，波特率
-//                    .parity(0) // 校验位；0:无校验位(NONE，默认)；1:奇校验位(ODD);2:偶校验位(EVEN)
-//                    .dataBits(8) // 数据位,默认8；可选值为5~8
-//                    .stopBits(1) // 停止位，默认1；1:1位停止位；2:2位停止位
-                    .build();
-            input = serialPort.getInputStream();
-            while (true) {
-                int size = input.available();
-                byte[] buffer = new byte[size];
-                input.read(buffer);
-                final String s = new String(buffer);
-                if (s.length() > 0) {
-                    runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-                                Log.e("----------", s);
-                                viewById.setText(viewById.getText().toString() + s + "\n------");
-                                if(s.equals("stoptis")){
-                                    releaseAndInitMediaList(false);
-                                    destroyPlayer();
-                                    destroyTime();
-                                    return;
-                                }
-                                if (s.startsWith("$") && !s.endsWith("!")) {
-                                    data = s;
-                                } else if (s.startsWith("$") && s.endsWith("!")) {
-                                    data = s;
-                                    String substring = data.substring(1, data.length() - 1);
-                                    palynew(substring);
-                                } else {
-                                    data += s;
-                                    if (s.endsWith("!")) {
-                                        String substring = data.substring(1, data.length() - 1);
-                                        palynew(substring);
-                                    }
-                            }
-                        }
-                    });
-                }
-            }
-            // serialPort.tryClose();
-        } catch (Exception e) {
-            Log.e("----------", e.getMessage());
-            throw new RuntimeException(e);
-        } finally {
-
-        }
-    }*/
 
     private SerialServerThread serverThread;
     private void initSerial(){
@@ -729,63 +695,20 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
         }
         return bytes;
     }
-    private List<MediaPlayer> mediaPlayers;
-    private CountDownTimer timers;
 
-    /**
-     * 释放并初始化
-     */
-    private void releaseAndInitMediaList(boolean isDes) {
-        if (mediaPlayers != null) {
-            for (int i = 0; i < mediaPlayers.size(); i++) {
-                MediaPlayer mediaPlayer = mediaPlayers.get(i);
-                if (null != mediaPlayer) {
-                    mediaPlayer.release();
-                    mediaPlayer = null;
-                }
-            }
+    private byte[] pcm_16bit_to_24bit(byte[] wav) {
+        int numSamples = wav.length / 2;
+        byte[] result = new byte[numSamples * 3];
+
+        for (int i = 0; i < numSamples; i++) {
+            int sample16bit = ((wav[i * 2 + 1] & 0xFF) << 8) | (wav[i * 2] & 0xFF);
+            result[i * 3] = 0;
+            result[i * 3 + 1] = wav[i * 2];
+            result[i * 3 + 2] = wav[i * 2 + 1];
         }
-        if (null != timers) {
-            timers.cancel();
-            timers = null;
-        }
-        if(!isDes){
-            mediaPlayers = new ArrayList<>();
-        }
+
+        return result;
     }
-
-
-    ///////////////////////////////////////////////////////////// 获取自然音的byte数组，pghpghpgh
-    ///////////////////////////////////////////////////////////// 获取自然音的byte数组，pghpghpgh
-    ///////////////////////////////////////////////////////////// 获取自然音的byte数组，pghpghpgh
-
-//    private byte[] cy_16bit_to_24bit(byte[] wav) {
-//        int numSamples = wav.length / 2;
-//        byte[] result = new byte[numSamples * 3];
-//
-//        for (int i = 0; i < numSamples; i++) {
-//            int sample16bit = ((wav[i * 2 + 1] & 0xFF) << 8) | (wav[i * 2] & 0xFF);
-//            int sample24bit = sample16bit << 8;
-//            result[i * 3] = (byte) (sample24bit & 0xFF);
-//            result[i * 3 + 1] = (byte) ((sample24bit >> 8) & 0xFF);
-//            result[i * 3 + 2] = (byte) ((sample24bit >> 16) & 0xFF); // 最低有效字节
-//        }
-//
-//        return result;
-//    }
-private byte[] pcm_16bit_to_24bit(byte[] wav) {
-    int numSamples = wav.length / 2;
-    byte[] result = new byte[numSamples * 3];
-
-    for (int i = 0; i < numSamples; i++) {
-        int sample16bit = ((wav[i * 2 + 1] & 0xFF) << 8) | (wav[i * 2] & 0xFF);
-        result[i * 3] = 0;
-        result[i * 3 + 1] = wav[i * 2];
-        result[i * 3 + 2] = wav[i * 2 + 1];
-    }
-
-    return result;
-}
 
     private byte[] readWavFile(int type, long time, boolean isLeft, JSONObject para) {
         // 获取 InputStream
@@ -929,68 +852,6 @@ private byte[] pcm_16bit_to_24bit(byte[] wav) {
         return adjustedAudioData;
     }
 
-    /**
-     * 同时播放一个或者多个
-     */
-    private void playType8and9Lists(int type, long time,boolean isLeft,JSONObject para) {
-        final MediaPlayer media = MediaPlayer.create(this, getResid(type,isLeft));
-        media.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
-            @Override
-            public void onCompletion(MediaPlayer mp) {//控制循环播放
-                if (mp != null) {
-                    mp.start();
-                }
-            }
-        });
-//        media.setAudioAttributes(new AudioAttributes.Builder()
-//                .setLegacyStreamType(AudioManager.STREAM_MUSIC)
-//                .setFlags(AudioAttributes.FLAG_AUDIBILITY_ENFORCED)
-//                .setUsage(AudioAttributes.USAGE_MEDIA)
-//                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-//
-//                .build());
-        // 设置左耳和右耳的音量
-        try {
-//            media.prepare();
-            int db=60; // test default val
-            if(para.has("db")){
-                db=para.getInt("db");
-            }
-            float volume = (1.0f/ 120) * db;
-            media.setVolume(volume,volume);
-//            media.setVolume(isLeft?volume:0.0f, isLeft?0.0f:volume); // 将左耳音量设置为 0，只播放右耳音频
-            media.start();
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
-
-        mediaPlayers.add(media);
-        if(timers==null){
-            timers = new CountDownTimer(time * 1000, 1000) {
-                @Override
-                public void onTick(long millisUntilFinished) {
-                    Log.e("-------12", millisUntilFinished + "");
-                }
-
-                @Override
-                public void onFinish() {
-                    Log.e("-------end", "结束");
-                    if (mediaPlayers != null) {
-                        for (int i = 0; i < mediaPlayers.size(); i++) {
-                            MediaPlayer mediaPlayer = mediaPlayers.get(i);
-                            if (null != mediaPlayer) {
-                                mediaPlayer.release();
-                                mediaPlayer = null;
-                            }
-                        }
-                    }
-                }
-            };
-            timers.start();
-        }
-
-    }
-
     // pghpghpgh , 各种自然音读取
     private int getResid(int type, boolean isLeft) {
         int resid=0;
@@ -1066,14 +927,7 @@ private byte[] pcm_16bit_to_24bit(byte[] wav) {
         }
         return true;
     }
-    /**
-     * 获取类型
-     *
-     * @param wave
-     * @param para
-     * @param type
-     * @return  添加需要修改
-     */
+
     private byte[] getWaveByte(Wave wave, JSONObject para, int type) {
         byte[] dbs = new byte[0];
         try {
@@ -1110,13 +964,6 @@ private byte[] pcm_16bit_to_24bit(byte[] wav) {
         return dbs;
     }
 
-    /**
-     * 获取Wave
-     *
-     * @param para
-     * @param type
-     * @return 添加需要修改
-     */
     private Wave getWave(JSONObject para, int type) {
         Wave wave = null;
         try {
@@ -1195,15 +1042,18 @@ private byte[] pcm_16bit_to_24bit(byte[] wav) {
         return wave;
     }
 
+    //region 将两种播放统一放在此处
+/*    pnz added since 2026-02-21
+    和audioplayer(非wav)相关的函数是 goPlayAudioNew
+    和mediaplayer(wav)相关的函数是 playType8and9Lists*/
 
-    private AudioPlayer player;//播放器
-    private boolean isPlay = true;//一直播放
-    private CountDownTimer timer;//倒计时
+    // 这一组是纯音,方波,噪音...
+    // audioplayer - timer
 
-    /**
-     * @param wave 播放波形
-     * @param time 播放时长
-     */
+    private AudioPlayer player;
+    private boolean isPlay = true;
+    private CountDownTimer timer;
+
     private void goPlayAudioNew(byte[] wave, long time, boolean left, boolean right) {
         destroyPlayer();
         destroyTime();
@@ -1227,11 +1077,6 @@ private byte[] pcm_16bit_to_24bit(byte[] wav) {
         timer.start();
     }
 
-
-
-    /**
-     * 销毁倒计时
-     */
     private void destroyTime() {
         if (null != timer) {
             timer.cancel();
@@ -1239,11 +1084,6 @@ private byte[] pcm_16bit_to_24bit(byte[] wav) {
         }
     }
 
-
-
-    /**
-     * 销毁播放器
-     */
     private void destroyPlayer() {
         isPlay = false;
         if (null != player) {
@@ -1252,33 +1092,83 @@ private byte[] pcm_16bit_to_24bit(byte[] wav) {
         }
     }
 
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
-        if(serverThread != null){
-            serverThread.stopServer();
-        }
-        releaseAndInitMediaList(true);
-        destroyTime();
-        destroyPlayer();
-    }
+    // 这一组是wav
+    // mediaplayer - timers
 
-    // pnz on 2026-02-21
-    // 重写接口SerialListener
-    @Override
-    public void onCommandReceived(final String json) {
-        // 必须在 UI 线程更新界面和触发播放
-        runOnUiThread(new Runnable() {
+    // pnz added since 2026-02-21
+    // 这个函数的意义在于系统原生的 MediaPlayer 只能实现“播放文件”，
+    // 它并没有一个方法叫 playForSeconds(5)
+    // 所以需要定时器和json解析出的time来控制
+    // 暂时弃用, 炫耀判断是否启用###
+    private void playType8and9Lists(int type, long time,boolean isLeft,JSONObject para) {
+        final MediaPlayer media = MediaPlayer.create(this, getResid(type,isLeft));
+        media.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
             @Override
-            public void run() {
-                viewById.setText("收到指令: " + json);
-                palynew(json); // 调用原有的播放解析逻辑
+            public void onCompletion(MediaPlayer mp) {//控制循环播放
+                if (mp != null) {
+                    mp.start();
+                }
             }
         });
+
+        try {
+            int db=60; // test default val
+            if(para.has("db")){
+                db=para.getInt("db");
+            }
+            float volume = (1.0f/ 120) * db;
+            media.setVolume(volume,volume);
+            media.start();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+
+        mediaPlayers.add(media);
+        if(timers==null){
+            timers = new CountDownTimer(time * 1000, 1000) {
+                @Override
+                public void onTick(long millisUntilFinished) {
+                    Log.e("-------12", millisUntilFinished + "");
+                }
+
+                @Override
+                public void onFinish() {
+                    Log.e("-------end", "结束");
+                    if (mediaPlayers != null) {
+                        for (int i = 0; i < mediaPlayers.size(); i++) {
+                            MediaPlayer mediaPlayer = mediaPlayers.get(i);
+                            if (null != mediaPlayer) {
+                                mediaPlayer.release();
+                                mediaPlayer = null;
+                            }
+                        }
+                    }
+                }
+            };
+            timers.start();
+        }
     }
 
-    @Override
-    public void onSerialError(Exception e) {
-        Log.e("SyActivity", "串口发生故障: " + e.getMessage());
+    private List<MediaPlayer> mediaPlayers;
+    private CountDownTimer timers;
+
+    private void releaseAndInitMediaList(boolean isDes) {
+        if (mediaPlayers != null) {
+            for (int i = 0; i < mediaPlayers.size(); i++) {
+                MediaPlayer mediaPlayer = mediaPlayers.get(i);
+                if (null != mediaPlayer) {
+                    mediaPlayer.release();
+                    mediaPlayer = null;
+                }
+            }
+        }
+        if (null != timers) {
+            timers.cancel();
+            timers = null;
+        }
+        if(!isDes){
+            mediaPlayers = new ArrayList<>();
+        }
     }
 }
+    //endregion 将两种播放统一放在此处
