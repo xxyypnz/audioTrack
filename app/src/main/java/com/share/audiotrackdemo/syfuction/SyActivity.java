@@ -76,7 +76,7 @@ import java.util.List;
  * @UpdateRemark: 更新说明
  * @Vsersion: 1.0
  */
-public class SyActivity extends AppCompatActivity {
+public class SyActivity extends AppCompatActivity implements SerialListener{
     TextView viewById;
     SeekBar seekBar, seekBar2;
     TextView txt1, txt2;
@@ -382,7 +382,7 @@ public class SyActivity extends AppCompatActivity {
     /**
      * 初始化串口
      */
-    private void initSerial() {
+   /* private void initSerial() {
         InputStream input;//收到串口信息
         input = null;
         try {
@@ -434,6 +434,17 @@ public class SyActivity extends AppCompatActivity {
             throw new RuntimeException(e);
         } finally {
 
+        }
+    }*/
+
+    private SerialServerThread serverThread;
+    private void initSerial(){
+        try{
+            SerialPort serialPort = SerialPort.newBuilder("/dev/ttyAS2", 115200).build();
+            serverThread = new SerialServerThread(serialPort, this);
+            serverThread.start();
+        }catch(Exception e){
+            Log.e("Serial", "打开串口失败: " + e.getMessage());
         }
     }
 
@@ -918,273 +929,6 @@ private byte[] pcm_16bit_to_24bit(byte[] wav) {
         return adjustedAudioData;
     }
 
-
-
-
-    ///////////////////////////////////////////////////////////// 获取自然音的byte数组，pghpghpgh
-    ///////////////////////////////////////////////////////////// 获取自然音的byte数组，pghpghpgh
-    ///////////////////////////////////////////////////////////// 获取自然音的byte数组，pghpghpgh
-
-
-// 已移除getCurrentPosition方法
-
-
-//    private  byte[] readWavFile(int type, long time,boolean isLeft,JSONObject para) {
-//        try {
-//            InputStream fis = getResources().openRawResource(getResid(type, isLeft));
-//            byte[] header = new byte[44];
-//            fis.read(header);
-//
-//            // 解析采样率
-//            int sampleRate = ((header[27] & 0xFF) << 24) | ((header[26] & 0xFF) << 16) |
-//                    ((header[25] & 0xFF) << 8) | (header[24] & 0xFF);
-//            Log.d("AudioReader", "Sample Rate: " + sampleRate);
-//            Log.e("---------文件的采样率为",sampleRate+"");
-//            if (sampleRate == 0) {
-////                throw new IllegalArgumentException("文件的采样率为0");
-//               return new byte[0];
-//            }
-//
-//            // 解析采样深度
-//            int bitDepth = ((header[35] & 0xFF) << 8) | (header[34] & 0xFF);
-//            Log.d("AudioReader", "Bit Depth: " + bitDepth);
-//
-//            // 解析音频数据长度
-//            int audioDataLength = ((header[43] & 0xFF) << 24) | ((header[42] & 0xFF) << 16) |
-//                    ((header[41] & 0xFF) << 8) | (header[40] & 0xFF);
-//            Log.d("AudioReader", "Audio Data Length: " + audioDataLength);
-//
-//            byte[] audioData = new byte[audioDataLength];
-//            fis.read(audioData);
-//
-//            fis.close();
-//
-//            // 统一转换为 16 位采样
-//            if (bitDepth != 16) {
-//                audioData = convertTo16Bit(audioData, bitDepth);
-//            }
-//            Log.d("AudioReader", "Final Audio Data Length: " + audioData.length);
-//            Log.d("type", type+"");
-//            // 自然音调整音量， db是UI给下来的数据
-//            float vol=4*para.getInt("db")/120;  // pghpghpgh need adjust db
-//            byte[] adjustedAudioData = adjustVolume(audioData,vol);
-//
-//            return adjustedAudioData;
-//
-//        } catch (IOException e) {
-//            e.printStackTrace();
-//            return new byte[0];
-//        } catch (JSONException e) {
-//            e.printStackTrace();
-//            return new byte[0];
-//        }
-//    }
-//
-//    // 自然音db调节 20250404
-//    private byte[] adjustVolume(byte[] audioData, float volumeDb) {
-//        float gainLinear = (float) Math.pow(10, volumeDb / 20.0);
-//        byte[] adjustedData = new byte[audioData.length];
-//
-//        for (int i = 0; i < audioData.length; i += 2) {
-//            short sample = (short) ((audioData[i + 1] << 8) | (audioData[i] & 0xFF));
-//            sample = (short) (sample * gainLinear);
-//            adjustedData[i] = (byte) (sample & 0xFF);
-//            adjustedData[i + 1] = (byte) ((sample >> 8) & 0xFF);
-//        }
-//
-//        return adjustedData;
-//    }
-//
-//    private static byte[] convertTo16Bit(byte[] audioData, int bitDepth) {
-//        if (bitDepth == 8) {
-//            byte[] newData = new byte[audioData.length * 2];
-//            for (int i = 0; i < audioData.length; i++) {
-//                short sample = (short) ((audioData[i] & 0xFF) << 8);
-//                newData[i * 2] = (byte) (sample & 0xFF);
-//                newData[i * 2 + 1] = (byte) ((sample >> 8) & 0xFF);
-//            }
-//            return newData;
-//        }
-//        return audioData;
-//    }
-
-
-    // GPT代码
-//    private  byte[] readWavFile(int type, long time,boolean isLeft,JSONObject para) {
-//        try {
-//            InputStream fis = getResources().openRawResource(getResid(type, isLeft));
-//            byte[] header = new byte[44];
-//            fis.read(header);
-//
-//            // 解析采样率
-//            int sampleRate = ((header[27] & 0xFF) << 24) | ((header[26] & 0xFF) << 16) |
-//                    ((header[25] & 0xFF) << 8) | (header[24] & 0xFF);
-//            Log.d("AudioReader", "Sample Rate: " + sampleRate);
-//            Log.e("---------文件的采样率为",sampleRate+"");
-//            if (sampleRate == 0) {
-////                throw new IllegalArgumentException("文件的采样率为0");
-//                return new byte[0];
-//            }
-//
-//            // 解析采样深度
-//            int bitDepth = ((header[35] & 0xFF) << 8) | (header[34] & 0xFF);
-//            Log.d("AudioReader", "Bit Depth: " + bitDepth);
-//
-//            // 解析音频数据长度
-//            int audioDataLength = ((header[43] & 0xFF) << 24) | ((header[42] & 0xFF) << 16) |
-//                    ((header[41] & 0xFF) << 8) | (header[40] & 0xFF);
-//            Log.d("AudioReader", "Audio Data Length: " + audioDataLength);
-//
-//            byte[] audioData = new byte[audioDataLength];
-//            fis.read(audioData);
-//
-//            fis.close();
-//
-//            // 统一转换为 16 位采样
-//            if (bitDepth != 16) {
-//                audioData = convertTo16Bit(audioData, bitDepth);
-//            }
-//            Log.d("AudioReader", "Final Audio Data Length: " + audioData.length);
-//            Log.d("type", type+"");
-//            // 自然音调整音量， db是UI给下来的数据
-//            float vol=4*para.getInt("db")/120;  // pghpghpgh need adjust db
-//            byte[] adjustedAudioData = adjustVolume(audioData,vol);
-//
-//            return adjustedAudioData;
-//
-//        } catch (IOException e) {
-//            e.printStackTrace();
-//            return new byte[0];
-//        } catch (JSONException e) {
-//            e.printStackTrace();
-//            return new byte[0];
-//        }
-//    }
-//
-//    // 自然音db调节 20250404
-//    private byte[] adjustVolume(byte[] audioData, float volumeDb) {
-//        float gainLinear = (float) Math.pow(10, volumeDb / 20.0);
-//        byte[] adjustedData = new byte[audioData.length];
-//
-//        for (int i = 0; i < audioData.length; i += 2) {
-//            short sample = (short) ((audioData[i + 1] << 8) | (audioData[i] & 0xFF));
-//            // Apply volume adjustment
-//            sample = (short) (sample * gainLinear);
-//
-//            // Clip the value to fit in the 16-bit range
-//            if (sample > 32767) {
-//                sample = 32767;  // max positive value for 16-bit signed integer
-//            } else if (sample < -32768) {
-//                sample = -32768; // max negative value for 16-bit signed integer
-//            }
-//
-//            adjustedData[i] = (byte) (sample & 0xFF);
-//            adjustedData[i + 1] = (byte) ((sample >> 8) & 0xFF);
-//        }
-//
-//        return adjustedData;
-//    }
-//
-//
-//    private static byte[] convertTo16Bit(byte[] audioData, int bitDepth) {
-//        if (bitDepth == 8) {
-//            byte[] newData = new byte[audioData.length * 2];
-//            for (int i = 0; i < audioData.length; i++) {
-//                // Zero-padding to 16-bit signed PCM
-//                short sample = (short) ((audioData[i] & 0xFF) - 128); // Convert unsigned 8-bit to signed 16-bit
-//                newData[i * 2] = (byte) (sample & 0xFF);
-//                newData[i * 2 + 1] = (byte) ((sample >> 8) & 0xFF);
-//            }
-//            return newData;
-//        }
-//        // If the file is already 16-bit, return as-is
-//        return audioData;
-//    }
-
-
-
-//    private  byte[] readWavFile_old(int type, long time,boolean isLeft,JSONObject para) {
-//        try {
-//            InputStream fis = getResources().openRawResource(getResid(type, isLeft));
-//            byte[] header = new byte[44];
-//            fis.read(header);
-//
-//            // 解析采样率
-//            int sampleRate = ((header[27] & 0xFF) << 24) | ((header[26] & 0xFF) << 16) |
-//                    ((header[25] & 0xFF) << 8) | (header[24] & 0xFF);
-//            Log.d("AudioReader", "Sample Rate: " + sampleRate);
-//            Log.e("---------文件的采样率为",sampleRate+"");
-//            if (sampleRate == 0) {
-////                throw new IllegalArgumentException("文件的采样率为0");
-//               return new byte[0];
-//            }
-//
-//            // 解析采样深度
-//            int bitDepth = ((header[35] & 0xFF) << 8) | (header[34] & 0xFF);
-//            Log.d("AudioReader", "Bit Depth: " + bitDepth);
-//
-//            // 解析音频数据长度
-//            int audioDataLength = ((header[43] & 0xFF) << 24) | ((header[42] & 0xFF) << 16) |
-//                    ((header[41] & 0xFF) << 8) | (header[40] & 0xFF);
-//            Log.d("AudioReader", "Audio Data Length: " + audioDataLength);
-//
-//            byte[] audioData = new byte[audioDataLength];
-//            fis.read(audioData);
-//
-//            fis.close();
-//
-//            // 统一转换为 16 位采样
-//            if (bitDepth != 16) {
-//                audioData = convertTo16Bit(audioData, bitDepth);
-//            }
-//            Log.d("AudioReader", "Final Audio Data Length: " + audioData.length);
-//            Log.d("type", type+"");
-//            // 自然音调整音量， db是UI给下来的数据
-//            float vol=4*para.getInt("db")/120;  // pghpghpgh need adjust db
-//            byte[] adjustedAudioData = adjustVolume(audioData,vol);
-//
-//            return adjustedAudioData;
-//
-//        } catch (IOException e) {
-//            e.printStackTrace();
-//            return new byte[0];
-//        } catch (JSONException e) {
-//            e.printStackTrace();
-//            return new byte[0];
-//        }
-//    }
-//
-//    // 自然音db调节 20250404
-//    private byte[] adjustVolume_old(byte[] audioData, float volumeDb) {
-//        float gainLinear = (float) Math.pow(10, volumeDb / 20.0);
-//        byte[] adjustedData = new byte[audioData.length];
-//
-//        for (int i = 0; i < audioData.length; i += 2) {
-//            short sample = (short) ((audioData[i + 1] << 8) | (audioData[i] & 0xFF));
-//            sample = (short) (sample * gainLinear);
-//            adjustedData[i] = (byte) (sample & 0xFF);
-//            adjustedData[i + 1] = (byte) ((sample >> 8) & 0xFF);
-//        }
-//
-//        return adjustedData;
-//    }
-//
-//    private static byte[] convertTo16Bit_old(byte[] audioData, int bitDepth) {
-//        if (bitDepth == 8) {
-//            byte[] newData = new byte[audioData.length * 2];
-//            for (int i = 0; i < audioData.length; i++) {
-//                short sample = (short) ((audioData[i] & 0xFF) << 8);
-//                newData[i * 2] = (byte) (sample & 0xFF);
-//                newData[i * 2 + 1] = (byte) ((sample >> 8) & 0xFF);
-//            }
-//            return newData;
-//        }
-//        return audioData;
-//    }
-
-
-
-
     /**
      * 同时播放一个或者多个
      */
@@ -1511,8 +1255,30 @@ private byte[] pcm_16bit_to_24bit(byte[] wav) {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        if(serverThread != null){
+            serverThread.stopServer();
+        }
         releaseAndInitMediaList(true);
         destroyTime();
         destroyPlayer();
+    }
+
+    // pnz on 2026-02-21
+    // 重写接口SerialListener
+    @Override
+    public void onCommandReceived(final String json) {
+        // 必须在 UI 线程更新界面和触发播放
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                viewById.setText("收到指令: " + json);
+                palynew(json); // 调用原有的播放解析逻辑
+            }
+        });
+    }
+
+    @Override
+    public void onSerialError(Exception e) {
+        Log.e("SyActivity", "串口发生故障: " + e.getMessage());
     }
 }
