@@ -305,9 +305,16 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
             @Override
             public void run() {
                 viewById.setText("收到指令: " + json);
+/*                json串发送方能够在界面上加入接收逻辑即可调用
+                serverThread.sendData(json);*/
                 palynew(json); // 调用原有的播放解析逻辑
             }
         });
+    }
+
+    @Override
+    public void onStopSignalReceived(){
+
     }
 
     @Override
