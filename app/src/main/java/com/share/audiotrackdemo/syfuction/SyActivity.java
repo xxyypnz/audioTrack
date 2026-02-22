@@ -17,6 +17,8 @@ import android.content.res.Resources;
 import android.media.AudioFormat;
 import android.media.AudioTrack;
 import android.util.Log;
+import android.widget.Toast;
+
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -261,17 +263,9 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
 
             }
         });
-        new Thread(new Runnable() {
-            @Override
-            public void run() {
-                if(decript()){
-                    initSerial();
-                }else{
-                    finish();
-                }
 
-            }
-        }).start();
+        // pnz on 2026-02-22
+        // 某一个直接发送全部命令字符串的简便入口
         findViewById(R.id.bt_zfc).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -281,19 +275,41 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
                         "}");
             }
         });
+
+        // pnz on 2026-02-22
+        // onCreate里面new线程
+        // 线程隐式包含Activity的引用
+        // 退出时线程可能没有释放(因为原来的逻辑是initSerial不退出)
+/*        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                if(decript()){
+                    initSerial();
+                }else{
+                    finish();
+                }
+
+            }
+        }).start();*/
+        if(!decript()){
+            Toast.makeText(this, "授权失败，即将退出", Toast.LENGTH_SHORT).show();
+            finish();
+        }
+        else initSerial();
     }
 
     // pnz added since 2026-02-21
     // 新开串口线程逻辑下的统一销毁策略
     @Override
     protected void onDestroy() {
-        super.onDestroy();
         if(serverThread != null){
             serverThread.stopServer();
+            serverThread = null;
         }
         releaseAndInitMediaList(true);
         destroyTime();
         destroyPlayer();
+        super.onDestroy();
     }
 
     // pnz on 2026-02-21
@@ -314,7 +330,9 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
 
     @Override
     public void onStopSignalReceived(){
-
+        releaseAndInitMediaList(false);
+        destroyPlayer();
+        destroyTime();
     }
 
     @Override
@@ -324,6 +342,8 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
 
     //endregion 设置初始化之后的回调
 
+    //region
+    // 在onCreate中设定的主线程先进行硬件授权校验
     private boolean decript() {
         // 请将下面的MAC地址替换为您设备实际的以太网MAC地址（获取后替换）
         String expectedMac = "8E:CB:A4:DD:12:91"; // 例如 "0A:1B:2C:3D:4E:5F"
@@ -377,6 +397,19 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
         return null;
     }
 
+    private SerialServerThread serverThread;
+    private void initSerial(){
+        try{
+            SerialPort serialPort = SerialPort.newBuilder("/dev/ttyAS2", 115200).build();
+            serverThread = new SerialServerThread(serialPort, this);
+            serverThread.start();
+        }catch(Exception e){
+            Log.e("Serial", "打开串口失败: " + e.getMessage());
+        }
+    }
+
+    //endregion
+
     /**
      * 收到播放
      */
@@ -410,16 +443,7 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
         }
     }
 
-    private SerialServerThread serverThread;
-    private void initSerial(){
-        try{
-            SerialPort serialPort = SerialPort.newBuilder("/dev/ttyAS2", 115200).build();
-            serverThread = new SerialServerThread(serialPort, this);
-            serverThread.start();
-        }catch(Exception e){
-            Log.e("Serial", "打开串口失败: " + e.getMessage());
-        }
-    }
+
 
     /**
      * 最新版本

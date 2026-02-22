@@ -52,6 +52,13 @@ public class SerialServerThread extends Thread {
         // 下面逻辑都没有, 终止符一直不出现
         // 接收到的字符串会一直储存在buffer中
         String content = buffer.toString();
+
+        // 注意要先处理不包含@!的"stoptis"
+        if("stoptis".equalsIgnoreCase(content)){
+            Log.w(TAG, "检测到停止信号!");
+            if(mListener != null) mListener.onStopSignalReceived();
+        }
+
         // 查找起始符和结束符
         int startIdx = content.indexOf("$");
         int endIdx = content.indexOf("!");
@@ -61,16 +68,9 @@ public class SerialServerThread extends Thread {
             // 截取中间的 JSON 部分
             String payload = content.substring(startIdx + 1, endIdx).trim();
 
-            if("stoptis".equalsIgnoreCase(payload)){
-                Log.w(TAG, "检测到停止信号!");
-                if(mListener != null) mListener.onStopSignalReceived();
-            }
-
             // 普通json指令
             // 回调给 Activity
-            else {
-                if (mListener != null) mListener.onCommandReceived(payload);
-            }
+            if (mListener != null) mListener.onCommandReceived(payload);
 
             // 删掉已处理的部分，保留剩余部分（防止粘包）
             buffer.delete(0, endIdx + 1);
