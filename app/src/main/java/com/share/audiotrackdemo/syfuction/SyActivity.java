@@ -323,7 +323,7 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
                 viewById.setText("收到指令: " + json);
 /*                json串发送方能够在界面上加入接收逻辑即可调用
                 serverThread.sendData(json);*/
-                palynew(json); // 调用原有的播放解析逻辑
+                goPlayNew(json); // 调用原有的播放解析逻辑
             }
         });
     }
@@ -342,8 +342,8 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
 
     //endregion 设置初始化之后的回调
 
-    //region
-    // 在onCreate中设定的主线程先进行硬件授权校验
+    //region 在onCreate中设定的主线程先进行硬件授权校验, 决定是否开启serial监听线程
+
     private boolean decript() {
         // 请将下面的MAC地址替换为您设备实际的以太网MAC地址（获取后替换）
         String expectedMac = "8E:CB:A4:DD:12:91"; // 例如 "0A:1B:2C:3D:4E:5F"
@@ -408,11 +408,79 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
         }
     }
 
-    //endregion
+    //endregion 在onCreate中设定的主线程先进行硬件授权校验, 决定是否开启serial监听线程
+
+    //region 尝试将左右耳播放逻辑统一化
+    // pnz on 2026-02-22
+
+    private byte[] generateChannelBuffer(JSONArray sources, long durationTime) throws Exception {
+        if (sources == null || sources.length() == 0) {
+            return new byte[0]; // 没音源，出空数据
+        }
+
+        // 分类汇总：合成音（WavePart）和自然音（WAV数据）
+        List<WavePart> syntheticParts = new ArrayList<>();
+        List<byte[]> naturalBuffers = new ArrayList<>();
+
+        for (int i = 0; i < sources.length(); i++) {
+            JSONObject item = sources.getJSONObject(i);
+            int type = item.getInt("type");
+            JSONObject para = item.getJSONObject("para");
+            int db = para.getInt("db");
+
+            if (isTypeBoolean(type)) { // 0-7, 10-12型：合成音
+                Wave wave = getWave(para, type); // 内部已引用校准表
+                wave.SetDurationMs((int) (durationTime * 1000));
+                syntheticParts.add(new WavePart(wave, db));
+            } else { // 8, 9, 13-24型：自然音
+                // 这里调用我们重构后的 CalibrationEngine 进行校准
+                byte[] wavData = readWavFileAndApplyCalibration(type, db, durationTime);
+                naturalBuffers.add(wavData);
+            }
+        }
+
+        // 混合逻辑统一化
+        byte[] finalBuffer;
+        byte[] syntheticMix = mixSyntheticParts(syntheticParts, durationTime); // 合成音混合结果
+
+        if (naturalBuffers.size() > 0) {
+            if (syntheticMix.length > 0) naturalBuffers.add(syntheticMix);
+            finalBuffer = mixAudioArrays(naturalBuffers); // 最终大混合
+        } else {
+            finalBuffer = syntheticMix;
+        }
+        return finalBuffer;
+    }
+
+    // 将palynew这个最顶层的逻辑函数替换成goPlayNew
+    private void goPlayNew(String jsonStr) {
+        releaseAndInitMediaList(false);
+        destroyPlayer();
+        destroyTime();
+
+        try {
+            JSONObject json = new JSONObject(jsonStr);
+            long time = json.getLong("time");
+
+            // 调用刚才统一的声道处理器，逻辑瞬间清晰！
+            byte[] leftBuf = generateChannelBuffer(json.optJSONArray("left"), time);
+            byte[] rightBuf = generateChannelBuffer(json.optJSONArray("right"), time);
+
+            // 构造立体声并播放
+            byte[] stereoData = createStereoBuffer(leftBuf, rightBuf);
+            goPlayAudioNew(stereoData, time, leftBuf.length > 0, rightBuf.length > 0);
+
+        } catch (Exception e) {
+            Log.e("AudioSource", "播放失败", e);
+        }
+    }
+
+    //endregion 尝试将左右耳播放逻辑统一化
 
     /**
      * 收到播放
      */
+    // ###
     private void paly2() {
         int volume = vo;
         int leftRate = pl;
@@ -443,8 +511,6 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
         }
     }
 
-
-
     /**
      * 最新版本
      * {"time":4,
@@ -456,7 +522,7 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
      *
      * @param s
      */
-    // // pghpghpgh palynew 改这个地方，20250516,这个函数负责接收串口的数据，解析并执行相应动作
+
     private void palynew(String s) {
         releaseAndInitMediaList(false);
         Log.e("收到---", s);
@@ -666,7 +732,7 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
             throw new RuntimeException(e);
         }
 
-    }
+    } //# palynew 最大的入口
     private byte[] mixAudioArrays(List<byte[]> audioDataList) {
         if (audioDataList == null || audioDataList.isEmpty()) {
             Log.e("MainActivity", "音频数据列表为空");
@@ -707,8 +773,7 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
         }
 
         return shortsToBytes(mixedShortAudioData);
-    }
-
+    } //# 最后的混合
 
     private short[] bytesToShorts(byte[] bytes, int length) {
         short[] shorts = new short[length / 2];
@@ -716,7 +781,7 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
             shorts[i] = (short) ((bytes[i * 2 + 1] << 8) | (bytes[i * 2] & 0xFF));
         }
         return shorts;
-    }
+    } //# 最后的混合
 
     private byte[] shortsToBytes(short[] shorts) {
         byte[] bytes = new byte[shorts.length * 2];
@@ -725,7 +790,7 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
             bytes[i * 2 + 1] = (byte) ((shorts[i] >> 8) & 0xFF);
         }
         return bytes;
-    }
+    } //# 最后的混合
 
     private byte[] pcm_16bit_to_24bit(byte[] wav) {
         int numSamples = wav.length / 2;
@@ -739,7 +804,7 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
         }
 
         return result;
-    }
+    } //# 自然音 功能函数
 
     private byte[] readWavFile(int type, long time, boolean isLeft, JSONObject para) {
         // 获取 InputStream
@@ -761,9 +826,8 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
             e.printStackTrace();
             return null;
         }
-    }
+    } //# 自然音调度中心
 
-    // 子函数：从 InputStream 中提取音频数据
     private byte[] extractAudioData(InputStream fis, boolean isLeft) throws IOException {
         ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
         byte[] buffer = new byte[1024];
@@ -780,9 +844,8 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
 
         // 返回提取出的音频数据
         return byteArrayOutputStream.toByteArray();
-    }
+    } //# 自然音 功能函数
 
-    // 子函数：根据 isLeft 的值提取数据
     private void processAudioBuffer(byte[] buffer, int bytesRead, boolean isLeft, ByteArrayOutputStream byteArrayOutputStream) {
         for (int i = 0; i < bytesRead; i += 4) {
             if (isLeft) {
@@ -795,43 +858,8 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
                 byteArrayOutputStream.write(buffer[i + 3]);
             }
         }
-    }
+    } //# 自然音 跟着extractAudioData
 
-    // 这是你的查表数组，db 和 gain 的对应关系
-    public static double[][][] gainTables = {
-            //言语噪音
-            //{{13}, {0, 0.000000}, {1, 0.000001}, {10, 0.0001}, {40, 0.0001}, {45, 0.005}, {50, 0.008}, {60, 0.022}, {70, 0.041}, {80, 0.1200}, {90, 0.370},{100, 0.950}, {110, 4.72800},{120, 35.9000}},
-            {{13}, {0, 0.000000}, {1, 0.000001}, {10, 0.0006}, {50, 0.008}, {60, 0.022}, {70, 0.041}, {80, 0.1200}, {90, 0.370},{100, 1.150}, {110, 4.72800},{120, 35.9000}},
-            //低频-风声
-            {{8}, {0, 0.000000}, {1, 0.000001},  {10, 0.0006}, {50, 0.0300}, {60, 0.100}, {70, 0.3500}, {80, 0.8000}, {90, 1.0000},{100, 1.5000}, {110, 5.3000},{120, 29.9000}},
-            // 低频-kuanxi室
-            {{9}, {0, 0.000000}, {1, 0.000001},  {10, 0.0006}, {50, 0.0050}, {60, 0.010}, {70, 0.0300}, {80, 0.0600}, {90, 0.2000},{100, 0.7000}, {110, 2.3000},{120, 29.9000}},
-            // 低频-水声1
-            {{14}, {0, 0.000000}, {1, 0.000001}, {10, 0.0006},  {50, 0.0050}, {60, 0.020}, {70, 0.0500}, {80, 0.180}, {90, 0.4400},{100, 1.3700}, {110, 5.3000},{120, 31.9000}},
-            // 多频-河水
-            {{15}, {0, 0.000000}, {1, 0.000001}, {10, 0.0006}, {50, 0.00300}, {60, 0.00800}, {70, 0.01600}, {80, 0.04600}, {90, 0.1700},{100, 0.5500}, {110, 1.570},{120, 29.3000}},
-            // 多频-瀑布
-            {{16}, {0, 0.000000}, {1, 0.000001}, {10, 0.0006}, {50, 0.008}, {60, 0.018}, {70, 0.038}, {80, 0.138}, {90, 0.298},{100, 0.750}, {110, 4.3000},{120, 29.9000}},
-            // 多频-树叶
-            {{17}, {0, 0.000000}, {1, 0.000001}, {10, 0.0006}, {50, 0.004}, {60, 0.009}, {70, 0.019}, {80, 0.059}, {90, 0.139},{100, 0.409}, {110, 1.609},{120, 7.609}},
-            // 高频-虫鸣
-            {{18}, {0, 0.000000}, {1, 0.000001}, {10, 0.0006}, {50, 0.0035}, {60, 0.008}, {70, 0.0170}, {80, 0.0580}, {90, 0.1580},{100, 0.3599}, {110, 1.5580},{120, 8.5580}},
-            // 高频-淋浴
-            {{19}, {0, 0.000000}, {1, 0.000001}, {10, 0.0006}, {50, 0.0055}, {60, 0.013}, {70, 0.0270}, {80, 0.0780}, {90, 0.2180},{100, 0.6599}, {110, 3.0580},{120, 17.5580}},
-            // 高频-鸟鸣1
-            {{20}, {0, 0.000000}, {1, 0.000001}, {10, 0.0006}, {50, 0.002}, {60, 0.005}, {70, 0.0120}, {80, 0.0380}, {90, 0.0980},{100, 0.3980}, {110, 0.9980},{120, 9.9980}},
-            // 全频-风声3
-            {{21}, {0, 0.000000}, {1, 0.000001}, {10, 0.0006}, {50, 0.0025}, {60, 0.0880}, {70, 0.0980}, {80, 0.1380}, {90, 0.2180},{100, 0.6599}, {110, 3.0580},{120, 17.5580}},
-            // 中频-滴水
-            {{22}, {0, 0.000000}, {1, 0.000001}, {10, 0.0006}, {50, 0.0380}, {60, 0.0880}, {70, 0.1880}, {80, 0.3180}, {90, 0.9180},{100, 1.9599}, {110, 3.0580},{120, 17.5580}},
-            // 中频-鸟鸣3
-            {{23}, {0, 0.000000}, {1, 0.000001},  {10, 0.0006}, {50, 0.0055}, {60, 0.013}, {70, 0.0270}, {80, 0.0780}, {90, 0.2180},{100, 0.6599}, {110, 2.0580},{120, 6.5580}},
-            // 中频-雨声
-            {{24}, {0, 0.000000}, {1, 0.000001},  {10, 0.0006}, {50, 0.0055}, {60, 0.013}, {70, 0.0270}, {80, 0.0780}, {90, 0.2580},{100, 0.8599}, {110, 3.0580},{120, 13.5580}},
-            // 这里可以根据实际需求继续扩展
-    };
-
-    // 根据给定的 db 值查表获取对应的 gain 值
     private static double getGainForDb(int type, int db) {
         double gain;
         // 遍历查表数组，根据 db 值查找对应的增益
@@ -857,10 +885,8 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
         // 你可以根据需求返回默认的增益值，或者使用最大值
         gain = 1.0;
         return gain;
-    }
+    } //# 自然音 跟着adjustVolume
 
-
-    // 调整音量的函数
     public static byte[] adjustVolume(int type, byte[] audioData, int db) {
         // 获取 db 对应的增益值
         double gain = getGainForDb(type, db);
@@ -881,9 +907,8 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
         }
 
         return adjustedAudioData;
-    }
+    } //# 自然音 功能函数
 
-    // pghpghpgh , 各种自然音读取
     private int getResid(int type, boolean isLeft) {
         int resid=0;
         if(type==8){
@@ -916,12 +941,12 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
             resid=isLeft?R.raw.l_type_24:R.raw.r_type_24;
         }
         return resid;
-    }
-
+    } //# 自然音 功能函数
 
     //0:纯音;1: 峨音;2:三角波;3:方波，4:白噪音;5: 窄带噪音;
     // 6: 调幅音-1;7:调幅音-2;8:自然音-大海，9:自然音-风声，10 粉红噪音
     // 添加需要修改
+
     private WavePart getWavePart(Wave freq, JSONObject para, int type) {
         WavePart db = null;
         try {
@@ -951,7 +976,7 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
 
         }
         return db;
-    }
+    } //# 合成音调度中心
     private boolean isTypeBoolean(int type) {
         if( type == 8 || type == 9||(type >= 13&&type<=24)){
             return false;
@@ -993,7 +1018,7 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
             Log.e("----------", e.getMessage());
         }
         return dbs;
-    }
+    } //# 合成音 合成音调度中心
 
     private Wave getWave(JSONObject para, int type) {
         Wave wave = null;
@@ -1071,7 +1096,40 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
 //            throw new RuntimeException(e);
         }
         return wave;
-    }
+    } //# getWave 合成音功能函数
+
+    public static double[][][] gainTables = {
+            //言语噪音
+            //{{13}, {0, 0.000000}, {1, 0.000001}, {10, 0.0001}, {40, 0.0001}, {45, 0.005}, {50, 0.008}, {60, 0.022}, {70, 0.041}, {80, 0.1200}, {90, 0.370},{100, 0.950}, {110, 4.72800},{120, 35.9000}},
+            {{13}, {0, 0.000000}, {1, 0.000001}, {10, 0.0006}, {50, 0.008}, {60, 0.022}, {70, 0.041}, {80, 0.1200}, {90, 0.370},{100, 1.150}, {110, 4.72800},{120, 35.9000}},
+            //低频-风声
+            {{8}, {0, 0.000000}, {1, 0.000001},  {10, 0.0006}, {50, 0.0300}, {60, 0.100}, {70, 0.3500}, {80, 0.8000}, {90, 1.0000},{100, 1.5000}, {110, 5.3000},{120, 29.9000}},
+            // 低频-kuanxi室
+            {{9}, {0, 0.000000}, {1, 0.000001},  {10, 0.0006}, {50, 0.0050}, {60, 0.010}, {70, 0.0300}, {80, 0.0600}, {90, 0.2000},{100, 0.7000}, {110, 2.3000},{120, 29.9000}},
+            // 低频-水声1
+            {{14}, {0, 0.000000}, {1, 0.000001}, {10, 0.0006},  {50, 0.0050}, {60, 0.020}, {70, 0.0500}, {80, 0.180}, {90, 0.4400},{100, 1.3700}, {110, 5.3000},{120, 31.9000}},
+            // 多频-河水
+            {{15}, {0, 0.000000}, {1, 0.000001}, {10, 0.0006}, {50, 0.00300}, {60, 0.00800}, {70, 0.01600}, {80, 0.04600}, {90, 0.1700},{100, 0.5500}, {110, 1.570},{120, 29.3000}},
+            // 多频-瀑布
+            {{16}, {0, 0.000000}, {1, 0.000001}, {10, 0.0006}, {50, 0.008}, {60, 0.018}, {70, 0.038}, {80, 0.138}, {90, 0.298},{100, 0.750}, {110, 4.3000},{120, 29.9000}},
+            // 多频-树叶
+            {{17}, {0, 0.000000}, {1, 0.000001}, {10, 0.0006}, {50, 0.004}, {60, 0.009}, {70, 0.019}, {80, 0.059}, {90, 0.139},{100, 0.409}, {110, 1.609},{120, 7.609}},
+            // 高频-虫鸣
+            {{18}, {0, 0.000000}, {1, 0.000001}, {10, 0.0006}, {50, 0.0035}, {60, 0.008}, {70, 0.0170}, {80, 0.0580}, {90, 0.1580},{100, 0.3599}, {110, 1.5580},{120, 8.5580}},
+            // 高频-淋浴
+            {{19}, {0, 0.000000}, {1, 0.000001}, {10, 0.0006}, {50, 0.0055}, {60, 0.013}, {70, 0.0270}, {80, 0.0780}, {90, 0.2180},{100, 0.6599}, {110, 3.0580},{120, 17.5580}},
+            // 高频-鸟鸣1
+            {{20}, {0, 0.000000}, {1, 0.000001}, {10, 0.0006}, {50, 0.002}, {60, 0.005}, {70, 0.0120}, {80, 0.0380}, {90, 0.0980},{100, 0.3980}, {110, 0.9980},{120, 9.9980}},
+            // 全频-风声3
+            {{21}, {0, 0.000000}, {1, 0.000001}, {10, 0.0006}, {50, 0.0025}, {60, 0.0880}, {70, 0.0980}, {80, 0.1380}, {90, 0.2180},{100, 0.6599}, {110, 3.0580},{120, 17.5580}},
+            // 中频-滴水
+            {{22}, {0, 0.000000}, {1, 0.000001}, {10, 0.0006}, {50, 0.0380}, {60, 0.0880}, {70, 0.1880}, {80, 0.3180}, {90, 0.9180},{100, 1.9599}, {110, 3.0580},{120, 17.5580}},
+            // 中频-鸟鸣3
+            {{23}, {0, 0.000000}, {1, 0.000001},  {10, 0.0006}, {50, 0.0055}, {60, 0.013}, {70, 0.0270}, {80, 0.0780}, {90, 0.2180},{100, 0.6599}, {110, 2.0580},{120, 6.5580}},
+            // 中频-雨声
+            {{24}, {0, 0.000000}, {1, 0.000001},  {10, 0.0006}, {50, 0.0055}, {60, 0.013}, {70, 0.0270}, {80, 0.0780}, {90, 0.2580},{100, 0.8599}, {110, 3.0580},{120, 13.5580}},
+            // 这里可以根据实际需求继续扩展
+    };
 
     //region 将两种播放统一放在此处
 /*    pnz added since 2026-02-21
@@ -1130,7 +1188,7 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
     // 这个函数的意义在于系统原生的 MediaPlayer 只能实现“播放文件”，
     // 它并没有一个方法叫 playForSeconds(5)
     // 所以需要定时器和json解析出的time来控制
-    // 暂时弃用, 炫耀判断是否启用###
+    // 暂时弃用, 需要判断是否启用###
     private void playType8and9Lists(int type, long time,boolean isLeft,JSONObject para) {
         final MediaPlayer media = MediaPlayer.create(this, getResid(type,isLeft));
         media.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
