@@ -288,6 +288,7 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
         // onCreate里面new线程
         // 线程隐式包含Activity的引用
         // 退出时线程可能没有释放(因为原来的逻辑是initSerial不退出)
+        // ###
 /*        new Thread(new Runnable() {
             @Override
             public void run() {
@@ -300,7 +301,8 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
             }
         }).start();*/
         if(!decript()){
-            Toast.makeText(this, "授权失败，即将退出", Toast.LENGTH_SHORT).show();
+            android.util.Log.e("---decript---", "2026-02-24");
+            // Toast.makeText(this, "授权失败，即将退出", Toast.LENGTH_SHORT).show();
             finish();
         }
         else initSerial();
@@ -429,6 +431,10 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
         releaseAndInitMediaList(false);
         destroyPlayer();
         destroyTime();
+
+        // pnz on 2026-02-24
+        // 也要记得加入打印
+        Log.e("---pnz goPlayNew收到---", jsonStr);
 
         try {
             JSONObject json = new JSONObject(jsonStr);
