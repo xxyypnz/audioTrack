@@ -78,6 +78,8 @@ import java.util.List;
  * @Vsersion: 1.0
  */
 
+// ### 1.paly2 2.onCreate的那些组件对应后端的什么 3.sin_wave_fitting数值怎么得到的 4.gainTables自动化求值
+
 public class SyActivity extends AppCompatActivity implements SerialListener{
     TextView viewById;
     SeekBar seekBar, seekBar2;
@@ -269,12 +271,18 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
         findViewById(R.id.bt_zfc).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                palynew("{\"time\":4," +
+                goPlayNew("{\"time\":4," +
                         "\"left\":[{\"type\":0, \"para\":{\"freq\":5540,\"db\":60}},{\"type\":2,\"para\":{\"freq\":5540,\"db\":55}}]," +
                         "\"right\":[{\"type\":2, \"para\":{\"freq\":5540,\"db\":50}},{\"type\":3,\"para\":{\"freq\":5540,\"db\":70}}]" +
                         "}");
             }
         });
+
+        // pnz on 2026-02-22
+        // 按照自然音和合成音的分类标准, 新建两个类
+        // 放到onCreate初始化
+        syntheticProcessor = new SyntheticTrackProcessor(this);
+        naturalProcessor = new NaturalTrackProcessor(this);
 
         // pnz on 2026-02-22
         // onCreate里面new线程
@@ -412,48 +420,12 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
 
     //region 尝试将左右耳播放逻辑统一化
     // pnz on 2026-02-22
-
-    private byte[] generateChannelBuffer(JSONArray sources, long durationTime) throws Exception {
-        if (sources == null || sources.length() == 0) {
-            return new byte[0]; // 没音源，出空数据
-        }
-
-        // 分类汇总：合成音（WavePart）和自然音（WAV数据）
-        List<WavePart> syntheticParts = new ArrayList<>();
-        List<byte[]> naturalBuffers = new ArrayList<>();
-
-        for (int i = 0; i < sources.length(); i++) {
-            JSONObject item = sources.getJSONObject(i);
-            int type = item.getInt("type");
-            JSONObject para = item.getJSONObject("para");
-            int db = para.getInt("db");
-
-            if (isTypeBoolean(type)) { // 0-7, 10-12型：合成音
-                Wave wave = getWave(para, type); // 内部已引用校准表
-                wave.SetDurationMs((int) (durationTime * 1000));
-                syntheticParts.add(new WavePart(wave, db));
-            } else { // 8, 9, 13-24型：自然音
-                // 这里调用我们重构后的 CalibrationEngine 进行校准
-                byte[] wavData = readWavFileAndApplyCalibration(type, db, durationTime);
-                naturalBuffers.add(wavData);
-            }
-        }
-
-        // 混合逻辑统一化
-        byte[] finalBuffer;
-        byte[] syntheticMix = mixSyntheticParts(syntheticParts, durationTime); // 合成音混合结果
-
-        if (naturalBuffers.size() > 0) {
-            if (syntheticMix.length > 0) naturalBuffers.add(syntheticMix);
-            finalBuffer = mixAudioArrays(naturalBuffers); // 最终大混合
-        } else {
-            finalBuffer = syntheticMix;
-        }
-        return finalBuffer;
-    }
+    private SyntheticTrackProcessor syntheticProcessor;
+    private NaturalTrackProcessor naturalProcessor;
 
     // 将palynew这个最顶层的逻辑函数替换成goPlayNew
     private void goPlayNew(String jsonStr) {
+        // 1. 初始化清场
         releaseAndInitMediaList(false);
         destroyPlayer();
         destroyTime();
@@ -462,16 +434,80 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
             JSONObject json = new JSONObject(jsonStr);
             long time = json.getLong("time");
 
-            // 调用刚才统一的声道处理器，逻辑瞬间清晰！
-            byte[] leftBuf = generateChannelBuffer(json.optJSONArray("left"), time);
-            byte[] rightBuf = generateChannelBuffer(json.optJSONArray("right"), time);
+            // 2. 分别获取左、右声道的缓冲区
+            byte[] leftChannelBuffer = getChannelData(json.optJSONArray("left"), time, true);
+            byte[] rightChannelBuffer = getChannelData(json.optJSONArray("right"), time, false);
 
-            // 构造立体声并播放
-            byte[] stereoData = createStereoBuffer(leftBuf, rightBuf);
-            goPlayAudioNew(stereoData, time, leftBuf.length > 0, rightBuf.length > 0);
+            // 3. 立体声合成 (Interleave)
+            int totalSamples = Math.max(leftChannelBuffer.length, rightChannelBuffer.length) / 3;
+            byte[] stereoData = new byte[totalSamples * 6];
+
+            for (int i = 0; i < totalSamples; i++) {
+                // 填充左声道 (3字节)
+                if (i * 3 + 2 < leftChannelBuffer.length) {
+                    System.arraycopy(leftChannelBuffer, i * 3, stereoData, i * 6, 3);
+                }
+                // 填充右声道 (3字节)
+                if (i * 3 + 2 < rightChannelBuffer.length) {
+                    System.arraycopy(rightChannelBuffer, i * 3, stereoData, i * 6 + 3, 3);
+                }
+            }
+
+            // 4. 播放
+            playAudio(stereoData, time, leftChannelBuffer.length > 0, rightChannelBuffer.length > 0);
 
         } catch (Exception e) {
-            Log.e("AudioSource", "播放失败", e);
+            Log.e("AudioServer", "播放逻辑崩溃", e);
+        }
+    }
+
+    /**
+     * 内部核心逻辑：判断左右耳 -> 分别获取 -> 混合
+     * 这是一个通用的单声道构建器
+     */
+    private byte[] getChannelData(JSONArray audioSources, long time, boolean isLeft) throws Exception {
+        if (audioSources == null || audioSources.length() == 0) return new byte[0];
+
+        List<WavePart> parts = new ArrayList<>(); // 存放合成音单元
+        List<byte[]> naturalList = new ArrayList<>(); // 存放自然音字节流
+
+        for (int i = 0; i < audioSources.length(); i++) {
+            JSONObject item = audioSources.getJSONObject(i);
+            int type = item.getInt("type");
+            JSONObject para = item.getJSONObject("para");
+
+            if (isTypeBoolean(type)) {
+                // 合成音车间加工
+                parts.add(syntheticProcessor.getPart(type, (int)(time * 1000), para));
+            } else {
+                // 自然音车间加工
+                // pnz on 2026-02-24 直接使用readWaveFile
+                // naturalList.add(naturalProcessor.processNaturalAudio(type, (int)(time * 1000), para, isLeft));
+                naturalList.add(naturalProcessor.readWaveFile(type, (int)(time * 1000), para, isLeft));
+            }
+        }
+
+        // 开始混合
+        byte[] syntheticResult = new byte[0];
+        if (parts.size() == 1) {
+            // pnz on 2026-02-23
+            // 首先Wave抽象类调用GetWaveBuffer(最终应该得到byte[])
+            // GetWaveBuffer函数内部会再调用各个波形自身的GetRawWaveBuffer得到double[]
+            // 而GetRawWaveBuffer又会调用GetAmplitude, 根据volume产生振幅的真正一步
+            // 关键函数: amp = GetAmplitude(freq, LoudnessCalibrationUtil.getDb(type, freq, volume))
+            // 公式如下: db = a * ln(amp) + b 因此 amp = exp((db - b) /a)
+            syntheticResult = parts.get(0).Wave().GetWaveBuffer(parts.get(0).DB());
+        } else if (parts.size() > 1) {
+            WaveMixer mixer = new WaveMixer(parts.toArray(new WavePart[0]));
+            mixer.SetDurationMs((int) (time * 1000));
+            syntheticResult = mixer.GetWaveBuffer();
+        }
+
+        if (naturalList.size() > 0) {
+            if (syntheticResult.length > 0) naturalList.add(syntheticResult);
+            return mixAudioArrays(naturalList); // 调用原有的多路 PCM 混合函数
+        } else {
+            return syntheticResult;
         }
     }
 
@@ -520,17 +556,16 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
      * Type: 声音类型， 0: 纯音; 1: 转音: 2: 三角波:3: 方波:4:白噪音:5: 窄带噪音:6:调幅音-1;7: 调幅音-2; 8: 纯音-1;
      * 9: 纯音-2;10粉红噪音 11 脉冲粉红噪音 12脉冲转音
      *
-     * @param s
      */
 
-    private void palynew(String s) {
+    /*private void palynew(String s) {
         releaseAndInitMediaList(false);
         Log.e("收到---", s);
         JSONObject jsonObject = null;
         try {
 
-            byte[] waveLeft; /* 最终波形 左*/
-            byte[] waveRight; /* 最终波形 右*/
+            byte[] waveLeft; *//* 最终波形 左*//*
+            byte[] waveRight; *//* 最终波形 右*//*
             boolean isLeft = false;//是否有左
             boolean isRight = false;//是否有右
             jsonObject = new JSONObject(s);
@@ -732,8 +767,114 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
             throw new RuntimeException(e);
         }
 
-    } //# palynew 最大的入口
+    } //# palynew 最大的入口*/
+
+    private void goPlayAudioNew(byte[] wave, long time, boolean left, boolean right) {
+        destroyPlayer();
+        destroyTime();
+        isPlay = true;
+        player = new AudioPlayer(this, wave, left, right);
+        player.play();
+        if (timer == null) {
+            timer = new CountDownTimer(time * 1000, 1000) {
+                @Override
+                public void onTick(long millisUntilFinished) {
+                    Log.e("-------12", millisUntilFinished + "");
+                }
+
+                @Override
+                public void onFinish() {
+                    Log.e("-------end", "结束");
+                    player.stop();
+                }
+            };
+        }
+        timer.start();
+    } //# palynew的辅助函数
+
+    // pnz on 2026-02-24
+    // mixAudioArrays应该从原来的16bit版本改成24bit版本
+    // 数据容器从short变成int
+    // 因为合成音和自然音都保证是 采样点 对应 3字节 的结构
     private byte[] mixAudioArrays(List<byte[]> audioDataList) {
+        if (audioDataList == null || audioDataList.isEmpty()) {
+            Log.e("MainActivity", "音频数据列表为空");
+            return new byte[0];
+        }
+
+        int minLength = Integer.MAX_VALUE;
+        for (byte[] audioData : audioDataList) {
+            if (audioData == null) {
+                Log.e("MainActivity", "音频数据为空");
+                return new byte[0];
+            }
+            // 校验：24位音频必须是 3 的倍数
+            if (audioData.length % 3 != 0) {
+                Log.e("MainActivity", "音频数据长度不是3的倍数(非24bit对齐)");
+                return new byte[0];
+            }
+            if (audioData.length < minLength) {
+                minLength = audioData.length;
+            }
+        }
+
+        // 确保 minLength 是 3 的倍数（对齐采样点）
+        minLength = (minLength / 3) * 3;
+
+        // 使用 int[][] 承载 24-bit 的数据（short存不下）
+        int[][] intAudioDataArray = new int[audioDataList.size()][minLength / 3];
+        for (int i = 0; i < audioDataList.size(); i++) {
+            intAudioDataArray[i] = bytesToInts24Bit(audioDataList.get(i), minLength);
+        }
+
+        int[] mixedIntAudioData = new int[minLength / 3];
+        for (int i = 0; i < minLength / 3; i++) {
+            long sum = 0; // 使用 long 防止累加时溢出
+            for (int j = 0; j < intAudioDataArray.length; j++) {
+                sum += intAudioDataArray[j][i];
+            }
+
+            // 归一化处理（平均混合），并防止 24-bit 边界溢出
+            // 24-bit 范围: -8388608 到 8388607
+            int avg = (int) (sum / intAudioDataArray.length);
+            mixedIntAudioData[i] = Math.min(Math.max(avg, -8388608), 8388607);
+        }
+
+        return intsToBytes24Bit(mixedIntAudioData);
+    }
+
+    /**
+     * 辅助函数：将 24-bit 字节数组转为有符号整数数组 (Little-Endian)
+     */
+    private int[] bytesToInts24Bit(byte[] bytes, int length) {
+        int[] ints = new int[length / 3];
+        for (int i = 0; i < ints.length; i++) {
+            int base = i * 3;
+            // 拼凑 24 位值：低位在前，高位在后
+            int value = (bytes[base] & 0xFF) |
+                    ((bytes[base + 1] & 0xFF) << 8) |
+                    (bytes[base + 2] << 16); // 第3字节包含符号位
+            ints[i] = value;
+        }
+        return ints;
+    }
+
+    /**
+     * 辅助函数：将整数数组转回 24-bit 字节数组 (Little-Endian)
+     */
+    private byte[] intsToBytes24Bit(int[] ints) {
+        byte[] bytes = new byte[ints.length * 3];
+        for (int i = 0; i < ints.length; i++) {
+            int base = i * 3;
+            int v = ints[i];
+            bytes[base] = (byte) (v & 0xFF);         // 低字节
+            bytes[base + 1] = (byte) ((v >> 8) & 0xFF);  // 中字节
+            bytes[base + 2] = (byte) ((v >> 16) & 0xFF); // 高字节
+        }
+        return bytes;
+    }
+
+/*    private byte[] mixAudioArrays(List<byte[]> audioDataList) {
         if (audioDataList == null || audioDataList.isEmpty()) {
             Log.e("MainActivity", "音频数据列表为空");
             return new byte[0];
@@ -941,7 +1082,7 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
             resid=isLeft?R.raw.l_type_24:R.raw.r_type_24;
         }
         return resid;
-    } //# 自然音 功能函数
+    } //# 自然音 功能函数*/
 
     //0:纯音;1: 峨音;2:三角波;3:方波，4:白噪音;5: 窄带噪音;
     // 6: 调幅音-1;7:调幅音-2;8:自然音-大海，9:自然音-风声，10 粉红噪音
@@ -982,7 +1123,7 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
             return false;
         }
         return true;
-    }
+    } //# 合成音为true
 
     private byte[] getWaveByte(Wave wave, JSONObject para, int type) {
         byte[] dbs = new byte[0];
@@ -1098,7 +1239,7 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
         return wave;
     } //# getWave 合成音功能函数
 
-    public static double[][][] gainTables = {
+    public static double[][][] gainTables = { //# 自然音 关键数据
             //言语噪音
             //{{13}, {0, 0.000000}, {1, 0.000001}, {10, 0.0001}, {40, 0.0001}, {45, 0.005}, {50, 0.008}, {60, 0.022}, {70, 0.041}, {80, 0.1200}, {90, 0.370},{100, 0.950}, {110, 4.72800},{120, 35.9000}},
             {{13}, {0, 0.000000}, {1, 0.000001}, {10, 0.0006}, {50, 0.008}, {60, 0.022}, {70, 0.041}, {80, 0.1200}, {90, 0.370},{100, 1.150}, {110, 4.72800},{120, 35.9000}},
@@ -1134,7 +1275,8 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
     //region 将两种播放统一放在此处
 /*    pnz added since 2026-02-21
     和audioplayer(非wav)相关的函数是 goPlayAudioNew
-    和mediaplayer(wav)相关的函数是 playType8and9Lists*/
+    和mediaplayer(wav)相关的函数是 playType8and9Lists
+    均已弃用改成playAudio*/
 
     // 这一组是纯音,方波,噪音...
     // audioplayer - timer
@@ -1143,7 +1285,7 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
     private boolean isPlay = true;
     private CountDownTimer timer;
 
-    private void goPlayAudioNew(byte[] wave, long time, boolean left, boolean right) {
+    private void playAudio(byte[] wave, long time, boolean left, boolean right) {
         destroyPlayer();
         destroyTime();
         isPlay = true;
@@ -1153,12 +1295,12 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
             timer = new CountDownTimer(time * 1000, 1000) {
                 @Override
                 public void onTick(long millisUntilFinished) {
-                    Log.e("-------12", millisUntilFinished + "");
+                    Log.e("---pnz 02-23---", millisUntilFinished + "");
                 }
 
                 @Override
                 public void onFinish() {
-                    Log.e("-------end", "结束");
+                    Log.e("---pnz 02-23---", "结束");
                     player.stop();
                 }
             };
@@ -1189,7 +1331,7 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
     // 它并没有一个方法叫 playForSeconds(5)
     // 所以需要定时器和json解析出的time来控制
     // 暂时弃用, 需要判断是否启用###
-    private void playType8and9Lists(int type, long time,boolean isLeft,JSONObject para) {
+    /*private void playType8and9Lists(int type, long time,boolean isLeft,JSONObject para) {
         final MediaPlayer media = MediaPlayer.create(this, getResid(type,isLeft));
         media.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
             @Override
@@ -1236,7 +1378,7 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
             };
             timers.start();
         }
-    }
+    }*/
 
     private List<MediaPlayer> mediaPlayers;
     private CountDownTimer timers;
