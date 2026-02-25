@@ -1,9 +1,6 @@
 package com.share.audiotrackdemo.syfuction;
 
 import android.content.Context;
-
-import androidx.appcompat.app.AppCompatActivity;
-
 import org.json.JSONObject;
 import java.io.*;
 import com.share.audiotrackdemo.R;

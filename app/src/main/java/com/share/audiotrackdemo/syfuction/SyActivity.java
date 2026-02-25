@@ -78,7 +78,7 @@ import java.util.List;
  * @Vsersion: 1.0
  */
 
-// ### 1.paly2 2.onCreate的那些组件对应后端的什么 3.sin_wave_fitting数值怎么得到的 4.gainTables自动化求值 5.降噪的逻辑 6.所有种类的波 7.循环播放
+// ### 3.sin_wave_fitting数值怎么得到的 4.gainTables自动化求值 5.降噪的逻辑 6.所有种类的波 7.循环播放
 
 public class SyActivity extends AppCompatActivity implements SerialListener{
     TextView viewById;
@@ -157,7 +157,7 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
         btnbf.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                paly2();
+                play2();
             }
         });
         seekBar2.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
@@ -288,7 +288,7 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
         // onCreate里面new线程
         // 线程隐式包含Activity的引用
         // 退出时线程可能没有释放(因为原来的逻辑是initSerial不退出)
-        // ###
+        // ### 分析结果: 修改后更佳
 /*        new Thread(new Runnable() {
             @Override
             public void run() {
@@ -301,10 +301,11 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
             }
         }).start();*/
         if(!decript()){
-            android.util.Log.e("---decript---", "2026-02-24");
+            android.util.Log.e("---decript---", "---failed---2026-02-25---");
             // Toast.makeText(this, "授权失败，即将退出", Toast.LENGTH_SHORT).show();
             finish();
         }
+
         else initSerial();
     }
 
@@ -354,7 +355,7 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
 
     //region 在onCreate中设定的主线程先进行硬件授权校验, 决定是否开启serial监听线程
 
-    // ### 需要核实MAC的检查确实是有效的
+    // ### 分析结果: MAC确实是有效的
     private boolean decript() {
         // 请将下面的MAC地址替换为您设备实际的以太网MAC地址（获取后替换）
         String expectedMac = "8E:CB:A4:DD:12:91"; // 例如 "0A:1B:2C:3D:4E:5F"
@@ -410,6 +411,7 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
 
     private SerialServerThread serverThread;
     private void initSerial(){
+        Log.e("---decript---", "---success---2026-02-25---");
         try{
             SerialPort serialPort = SerialPort.newBuilder("/dev/ttyAS2", 115200).build();
             serverThread = new SerialServerThread(serialPort, this);
@@ -528,35 +530,18 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
     /**
      * 收到播放
      */
-    // ###
-    private void paly2() {
+    // ### 分析结果: 改为作为简单测试用
+    private void play2() {
         int volume = vo;
-        int leftRate = pl;
-        int rightRate1 = 0;
-        long time = 4;//播放时长
-        try {
-            /* 分贝校准文件 */
-//            File calibrationFile = new File("file:///android_asset/sin_wave_fitting");
-//
-//            byte[] wave; /* 最终波形 */
-//            IWave sinLeft;
-//            IWave sinRight;
-//            if (rightRate1 == 0) {//纯音
-//                sinLeft = new SinWave(leftRate/* 频率 */, calibrationFile);
-//                wave = sinLeft.GetWaveBuffer(volume);
-//            } else {//混音
-//                sinLeft = new SinWave(leftRate/* 频率 */, calibrationFile);
-//                sinRight = new SinWave(rightRate1/* 频率 */, calibrationFile);
-//                WavePart parts[] = new WavePart[2];
-//                parts[0] = new WavePart(sinLeft, volume);
-//                parts[1] = new WavePart(sinRight, volume);
-//                WaveMixer mixer = new WaveMixer(parts);
-//                wave = mixer.GetWaveBuffer();
-//            }
-//            goPlayAudio(wave, time);
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
+        int frequency = pl;
+        String mockJson = "{" +
+                "\"time\":4," +
+                "\"left\":[{\"type\":0, \"para\":{\"freq\":" + frequency + ",\"db\":" + volume + "}}]," +
+                "\"right\":[]" +
+                "}";
+
+        Log.d("ManualTest", "点击了播放按钮，模拟指令: " + mockJson);
+        goPlayNew(mockJson);
     }
 
     /**
@@ -740,55 +725,7 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
     // 这个函数的意义在于系统原生的 MediaPlayer 只能实现“播放文件”，
     // 它并没有一个方法叫 playForSeconds(5)
     // 所以需要定时器和json解析出的time来控制
-    // 暂时弃用, 需要判断是否启用###
-    /*private void playType8and9Lists(int type, long time,boolean isLeft,JSONObject para) {
-        final MediaPlayer media = MediaPlayer.create(this, getResid(type,isLeft));
-        media.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
-            @Override
-            public void onCompletion(MediaPlayer mp) {//控制循环播放
-                if (mp != null) {
-                    mp.start();
-                }
-            }
-        });
-
-        try {
-            int db=60; // test default val
-            if(para.has("db")){
-                db=para.getInt("db");
-            }
-            float volume = (1.0f/ 120) * db;
-            media.setVolume(volume,volume);
-            media.start();
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
-
-        mediaPlayers.add(media);
-        if(timers==null){
-            timers = new CountDownTimer(time * 1000, 1000) {
-                @Override
-                public void onTick(long millisUntilFinished) {
-                    Log.e("-------12", millisUntilFinished + "");
-                }
-
-                @Override
-                public void onFinish() {
-                    Log.e("-------end", "结束");
-                    if (mediaPlayers != null) {
-                        for (int i = 0; i < mediaPlayers.size(); i++) {
-                            MediaPlayer mediaPlayer = mediaPlayers.get(i);
-                            if (null != mediaPlayer) {
-                                mediaPlayer.release();
-                                mediaPlayer = null;
-                            }
-                        }
-                    }
-                }
-            };
-            timers.start();
-        }
-    }*/
+    // ### 分析结果: 删除函数playType8and9Lists, 统一使用playAudio进行播放
 
     private List<MediaPlayer> mediaPlayers;
     private CountDownTimer timers;
