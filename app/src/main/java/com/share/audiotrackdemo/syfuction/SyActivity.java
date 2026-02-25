@@ -78,7 +78,7 @@ import java.util.List;
  * @Vsersion: 1.0
  */
 
-// ### 1.paly2 2.onCreate的那些组件对应后端的什么 3.sin_wave_fitting数值怎么得到的 4.gainTables自动化求值
+// ### 1.paly2 2.onCreate的那些组件对应后端的什么 3.sin_wave_fitting数值怎么得到的 4.gainTables自动化求值 5.降噪的逻辑 6.所有种类的波 7.循环播放
 
 public class SyActivity extends AppCompatActivity implements SerialListener{
     TextView viewById;
@@ -354,6 +354,7 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
 
     //region 在onCreate中设定的主线程先进行硬件授权校验, 决定是否开启serial监听线程
 
+    // ### 需要核实MAC的检查确实是有效的
     private boolean decript() {
         // 请将下面的MAC地址替换为您设备实际的以太网MAC地址（获取后替换）
         String expectedMac = "8E:CB:A4:DD:12:91"; // 例如 "0A:1B:2C:3D:4E:5F"
@@ -564,14 +565,14 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
      *
      */
 
-    /*private void palynew(String s) {
+    private void palynew(String s) {
         releaseAndInitMediaList(false);
         Log.e("收到---", s);
         JSONObject jsonObject = null;
         try {
 
-            byte[] waveLeft; *//* 最终波形 左*//*
-            byte[] waveRight; *//* 最终波形 右*//*
+            byte[] waveLeft;  最终波形 左
+            byte[] waveRight;  最终波形 右
             boolean isLeft = false;//是否有左
             boolean isRight = false;//是否有右
             jsonObject = new JSONObject(s);
@@ -773,7 +774,7 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
             throw new RuntimeException(e);
         }
 
-    } //# palynew 最大的入口*/
+    } //# palynew 最大的入口
 
     private void goPlayAudioNew(byte[] wave, long time, boolean left, boolean right) {
         destroyPlayer();
@@ -880,7 +881,7 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
         return bytes;
     }
 
-/*    private byte[] mixAudioArrays(List<byte[]> audioDataList) {
+    private byte[] mixAudioArrays(List<byte[]> audioDataList) {
         if (audioDataList == null || audioDataList.isEmpty()) {
             Log.e("MainActivity", "音频数据列表为空");
             return new byte[0];
@@ -1088,7 +1089,7 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
             resid=isLeft?R.raw.l_type_24:R.raw.r_type_24;
         }
         return resid;
-    } //# 自然音 功能函数*/
+    } //# 自然音 功能函数
 
     //0:纯音;1: 峨音;2:三角波;3:方波，4:白噪音;5: 窄带噪音;
     // 6: 调幅音-1;7:调幅音-2;8:自然音-大海，9:自然音-风声，10 粉红噪音
