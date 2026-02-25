@@ -11,7 +11,7 @@ import com.share.audiotrackdemo.R;
 /**
  * 自然音处理“车间”
  */
-public class NaturalTrackProcessor extends AppCompatActivity {
+public class NaturalTrackProcessor{
     private Context context;
 
     public NaturalTrackProcessor(Context context) {
@@ -43,7 +43,7 @@ public class NaturalTrackProcessor extends AppCompatActivity {
     // --- 以下填充所有自然音的功能辅助函数 ---
     public byte[] readWaveFile(int type, long time, JSONObject para, boolean isLeft) {
         // 获取 InputStream
-        InputStream fis = getResources().openRawResource(getResid(type, isLeft));
+        InputStream fis = context.getResources().openRawResource(getResid(type, isLeft));
 
         try {
             // 获取 para 中的 db 值，默认值为 0，且限制在合理范围内
