@@ -78,7 +78,12 @@ import java.util.List;
  * @Vsersion: 1.0
  */
 
-// ### 3.sin_wave_fitting数值怎么得到的 4.gainTables自动化求值 5.降噪的逻辑 6.所有种类的波 7.循环播放
+// ###
+// 3.sin_wave_fitting数值怎么得到的
+// 4.gainTables自动化求值
+// 5.降噪的逻辑
+// 6.所有种类的波
+// 7.循环播放
 
 public class SyActivity extends AppCompatActivity implements SerialListener{
     TextView viewById;
@@ -690,12 +695,12 @@ public class SyActivity extends AppCompatActivity implements SerialListener{
             timer = new CountDownTimer(time * 1000, 1000) {
                 @Override
                 public void onTick(long millisUntilFinished) {
-                    Log.e("---pnz 02-23---", millisUntilFinished + "");
+                    Log.e("---pnz 02-26---", millisUntilFinished + "---onTick");
                 }
 
                 @Override
                 public void onFinish() {
-                    Log.e("---pnz 02-23---", "结束");
+                    Log.e("---pnz 02-26---", "---playAudio onFinish");
                     player.stop();
                 }
             };
