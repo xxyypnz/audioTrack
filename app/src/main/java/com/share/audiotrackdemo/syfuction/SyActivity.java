@@ -79,11 +79,8 @@ import java.util.List;
  */
 
 // ###
-// 3.sin_wave_fitting数值怎么得到的
-// 4.gainTables自动化求值
-// 5.降噪的逻辑
-// 6.所有种类的波
-// 7.循环播放
+// sin_wave_fitting数值怎么得到的
+// gainTables自动化求值
 
 public class SyActivity extends AppCompatActivity implements SerialListener{
     TextView viewById;
